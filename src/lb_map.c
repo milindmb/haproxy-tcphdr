@@ -139,6 +139,7 @@ void recalc_server_map(struct proxy *px)
  */
 void init_server_map(struct proxy *p)
 {
+	
 	struct server *srv;
 	int pgcd;
 	int act, bck;
@@ -147,6 +148,7 @@ void init_server_map(struct proxy *p)
 	p->lbprm.set_server_status_down = map_set_server_status_down;
 	p->lbprm.update_server_eweight = NULL;
  
+ 	DPRINTF(stderr,"init_server_map :");
 	if (!p->srv)
 		return;
 

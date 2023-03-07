@@ -626,8 +626,11 @@ int assign_server(struct stream *s)
 	struct server *conn_slot;
 	struct server *srv = NULL, *prev_srv;
 	int err;
+	char hbuff[34];
+	int hsize=0;
 
 	DPRINTF(stderr,"assign_server : s=%p\n",s);
+	DPRINTF(stderr,"lb param algo start : %s\n", (s->be->lbprm.arg_str));
 
 	err = SRV_STATUS_INTERNAL;
 	if (unlikely(s->pend_pos || s->flags & SF_ASSIGNED))
@@ -700,21 +703,28 @@ int assign_server(struct stream *s)
 		 * the LB lookup function. Only the hashing functions will need
 		 * some input data in fact, and will support multiple algorithms.
 		 */
+		 
+		DPRINTF(stderr,"lb param algo : %d\n", (s->be->lbprm.algo & BE_LB_LKUP));
+
 		switch (s->be->lbprm.algo & BE_LB_LKUP) {
 		case BE_LB_LKUP_RRTREE:
+		 	DPRINTF(stderr,"BE_LB_LKUP_RRTREE1\n");
 			srv = fwrr_get_next_server(s->be, prev_srv);
 			break;
 
 		case BE_LB_LKUP_FSTREE:
+			DPRINTF(stderr,"BE_LB_LKUP_FSTREE\n");
 			srv = fas_get_next_server(s->be, prev_srv);
 			break;
 
 		case BE_LB_LKUP_LCTREE:
+			DPRINTF(stderr,"BE_LB_LKUP_LCTREE\n");
 			srv = fwlc_get_next_server(s->be, prev_srv);
 			break;
 
 		case BE_LB_LKUP_CHTREE:
 		case BE_LB_LKUP_MAP:
+			DPRINTF(stderr,"BE_LB_LKUP_MAP|BE_LB_LKUP_CHTREE\n");
 			if ((s->be->lbprm.algo & BE_LB_KIND) == BE_LB_KIND_RR) {
 				/* static-rr (map) or random (chash) */
 				if ((s->be->lbprm.algo & BE_LB_PARM) == BE_LB_RR_RANDOM)
@@ -729,10 +739,14 @@ int assign_server(struct stream *s)
 				goto out;
 			}
 
+
+			DPRINTF(stderr,"lb param : %d\n", (s->be->lbprm.algo & BE_LB_PARM));
+
 			switch (s->be->lbprm.algo & BE_LB_PARM) {
 				const struct sockaddr_storage *src;
 
 			case BE_LB_HASH_SRC:
+				DPRINTF(stderr,"BE_LB_HASH_SRC\n");
 				src = sc_src(s->scf);
 				if (src && src->ss_family == AF_INET) {
 					srv = get_server_sh(s->be,
@@ -747,6 +761,7 @@ int assign_server(struct stream *s)
 				break;
 
 			case BE_LB_HASH_URI:
+				DPRINTF(stderr,"BE_LB_HASH_URI\n");
 				/* URI hashing */
 				if (IS_HTX_STRM(s) && s->txn->req.msg_state >= HTTP_MSG_BODY) {
 					struct ist uri;
@@ -765,6 +780,7 @@ int assign_server(struct stream *s)
 				break;
 
 			case BE_LB_HASH_PRM:
+				DPRINTF(stderr,"BE_LB_HASH_PRM\n");
 				/* URL Parameter hashing */
 				if (IS_HTX_STRM(s) && s->txn->req.msg_state >= HTTP_MSG_BODY) {
 					struct ist uri;
@@ -779,6 +795,9 @@ int assign_server(struct stream *s)
 
 			case BE_LB_HASH_HDR:
 				/* Header Parameter hashing */
+
+				DPRINTF(stderr,"BE_LB_HASH_HDR\n");
+
 				if (IS_HTX_STRM(s) && s->txn->req.msg_state >= HTTP_MSG_BODY)
 					srv = get_server_hh(s, prev_srv);
 				break;
@@ -793,6 +812,21 @@ int assign_server(struct stream *s)
 				srv = get_server_expr(s, prev_srv);
 				break;
 
+			case BE_LB_TCPH:
+
+				DPRINTF(stderr,"TCP Header1 %s\n",  s->be->lbprm.arg_str);
+				DPRINTF(stderr,"TCP Header2 %s\n", s->req.buf.area);
+				sscanf( s->be->lbprm.arg_str, "%d", &hsize );
+				strncpy(hbuff,s->req.buf.area, hsize);
+				hbuff[hsize+1] ='\0';
+				DPRINTF(stderr,"TCP Header3 %s", hbuff);
+
+
+				for (srv = s->be->srv; srv; srv = srv->next) {
+					DPRINTF(stderr,"server 3 %s", srv->hostname_dn);
+				}
+
+				break;
 			default:
 				/* unknown balancing algorithm */
 				err = SRV_STATUS_INTERNAL;
@@ -2785,6 +2819,31 @@ int backend_parse_balance(const char **args, char **err, struct proxy *curproxy)
 			}
 			curproxy->lbprm.arg_opt1 = 1;
 		}
+	}
+	else if (!strncmp(args[0], "tcphdr(", 7)) {
+		const char *beg, *end;
+
+		beg = args[0] + 7;
+		end = strchr(beg, ')');
+
+		if (!end || end == beg) {
+			memprintf(err, "hdr requires an http header field name.");
+			return -1;
+		}
+
+	DPRINTF(stderr,"algo1... :%d\n",curproxy->lbprm.algo );
+
+		curproxy->lbprm.algo &= ~BE_LB_ALGO;
+	DPRINTF(stderr,"algo2... :%d\n",curproxy->lbprm.algo );
+		curproxy->lbprm.algo |= BE_LB_ALGO_TCPH;
+
+		DPRINTF(stderr,"algo3... :%d\n",curproxy->lbprm.algo );
+		free(curproxy->lbprm.arg_str);
+		curproxy->lbprm.arg_len = end - beg;
+		curproxy->lbprm.arg_str = my_strndup(beg, end - beg);
+		curproxy->lbprm.arg_opt1 = 0;
+
+		DPRINTF(stderr,"parsing... : s=%s\n",curproxy->lbprm.arg_str);
 	}
 	else if (!strncmp(args[0], "rdp-cookie", 10)) {
 		curproxy->lbprm.algo &= ~BE_LB_ALGO;
