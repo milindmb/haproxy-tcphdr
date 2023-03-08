@@ -275,6 +275,31 @@ struct server *map_get_server_hash(struct proxy *px, unsigned int hash)
 }
 
 
+
+struct server *map_get_server_tcphdr(struct proxy *px, char *nodeid)
+{
+	struct server *srv_assigned = NULL;
+	struct server *srv = NULL;
+	int d = -1, d1 = 0, d2 = 0;
+	
+
+	for (srv = px->srv; srv; srv = srv->next) {
+		DPRINTF(stderr,"server 3 '%s'  - '%s' \n", srv->id, nodeid);
+		d =  strcmp ( srv->id , nodeid);
+		d1 = strlen(srv->id);
+		d2 = strlen( nodeid);
+		DPRINTF(stderr,"TCP Header strcmp %d %d %d\n", d1, d2, d);
+		if(  d == 0){
+			srv_assigned = srv;
+			break;
+		}
+	}
+	DPRINTF(stderr,"server assigned %p\n", srv_assigned);
+	return srv_assigned;
+}
+
+
+
 /*
  * Local variables:
  *  c-indent-level: 8

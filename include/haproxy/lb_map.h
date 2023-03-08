@@ -30,6 +30,8 @@ void recalc_server_map(struct proxy *px);
 void init_server_map(struct proxy *p);
 struct server *map_get_server_rr(struct proxy *px, struct server *srvtoavoid);
 struct server *map_get_server_hash(struct proxy *px, unsigned int hash);
+struct server *map_get_server_tcphdr(struct proxy *px, char *nodeid);
+
 
 #endif /* _HAPROXY_LB_MAP_H */
 

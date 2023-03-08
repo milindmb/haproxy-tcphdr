@@ -814,16 +814,17 @@ int assign_server(struct stream *s)
 
 			case BE_LB_TCPH:
 
-				DPRINTF(stderr,"TCP Header1 %s\n",  s->be->lbprm.arg_str);
-				DPRINTF(stderr,"TCP Header2 %s\n", s->req.buf.area);
-				sscanf( s->be->lbprm.arg_str, "%d", &hsize );
-				strncpy(hbuff,s->req.buf.area, hsize);
-				hbuff[hsize+1] ='\0';
-				DPRINTF(stderr,"TCP Header3 %s", hbuff);
+				if( s->req.buf.data > 0){
+					hbuff[0] = '\0';
+					DPRINTF(stderr,"TCP Header1 %s\n",  s->be->lbprm.arg_str);
+					DPRINTF(stderr,"TCP Header2 %s data: %ld , head : %ld\n", s->req.buf.area, s->req.buf.data, s->req.buf.head);
+					sscanf( s->be->lbprm.arg_str, "%d", &hsize );
+					strncpy(hbuff,s->req.buf.area, 5);
+					hbuff[hsize] ='\0';
+					DPRINTF(stderr,"TCP Header3 %s\n", hbuff);
 
 
-				for (srv = s->be->srv; srv; srv = srv->next) {
-					DPRINTF(stderr,"server 3 %s", srv->hostname_dn);
+					srv = map_get_server_tcphdr( s->be, hbuff);
 				}
 
 				break;
